@@ -1,0 +1,15 @@
+
+Intensity Inside Ch=1 Img=1
+ ==================== 
+Distance to Surface,Image Intensity Mean Inside,Intensity Mean Inside,Intensity Mean minus Std Inside,Intensity Mean plus Std Inside,Unit,Channel,Collection,Image,Time,ID,
+-2.3205,6.25763,1.8546,-2.23128,5.94048,,1,Intensity Inside,Image 1,1,,
+-2.0995,6.25763,2.15685,-2.47291,6.78661,,1,Intensity Inside,Image 1,1,,
+-1.8785,6.25763,2.79413,-2.93314,8.52139,,1,Intensity Inside,Image 1,1,,
+-1.6575,6.25763,3.52387,-3.7562,10.8039,,1,Intensity Inside,Image 1,1,,
+-1.4365,6.25763,4.19113,-5.26654,13.6488,,1,Intensity Inside,Image 1,1,,
+-1.2155,6.25763,4.87005,-7.94486,17.685,,1,Intensity Inside,Image 1,1,,
+-0.9945,6.25763,5.63264,-11.472,22.7373,,1,Intensity Inside,Image 1,1,,
+-0.7735,6.25763,6.35073,-14.8203,27.5217,,1,Intensity Inside,Image 1,1,,
+-0.5525,6.25763,7.05538,-17.3138,31.4246,,1,Intensity Inside,Image 1,1,,
+-0.3315,6.25763,7.1946,-18.3555,32.7446,,1,Intensity Inside,Image 1,1,,
+-0.1105,6.25763,6.52823,-17.4576,30.514,,1,Intensity Inside,Image 1,1,,
