@@ -1,5 +1,9 @@
-Radial distribution/
+# ignore these folders
+/Raw_data_for_Orgaplex_Test/
+/Old R_Scripts/
 
-Raw_data_for_Orgaplex_Test/ 
+# ignore these files
+/PHASE1_COMPLETE.md
+/CHANGES_v2.1.md 
 
 
