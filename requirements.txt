@@ -1,3 +1,14 @@
-pandas>=2.3.3
-openpyxl>=3.1.5
-numpy>=2.3.4
+# Core dependencies for Orgaplex Analyzer v2.1
+# Tested with Python 3.11
+
+# Data manipulation
+pandas>=2.0.0,<2.2.0
+numpy>=1.24.0,<2.0.0
+
+# Excel export
+openpyxl>=3.1.0,<4.0.0
+
+# Testing dependencies (optional, for development)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# pytest-mock>=3.11.1

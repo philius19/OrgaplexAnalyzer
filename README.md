@@ -1,4 +1,4 @@
-# Organelle Analysis Software v2.0
+# Organelle Analysis Software v2.1
 
 Modern Python software for analyzing organelle interactions from Imaris-generated segmentation data. This is a complete rewrite with modular architecture, improved output format, and both GUI and command-line interfaces.
 
@@ -40,10 +40,12 @@ conda activate orgaplex
 ```
 
 The environment is already created at `/Users/philippkaintoch/anaconda3/envs/orgaplex` with all required packages:
-- pandas (2.3.3+)
-- openpyxl (3.1.5+)
-- numpy (2.3.4+)
+- pandas (2.0.0+)
+- openpyxl (3.1.0+)
+- numpy (1.24.0+)
 - Python 3.11
+
+**NEW in v2.1**: Production-ready quality improvements including data validation, logging framework, data provenance tracking, and performance optimizations. See `VERSION_2.1_UPDATES.md` for complete details.
 
 ---
 

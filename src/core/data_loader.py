@@ -16,11 +16,16 @@ DATE: 2025-11-02
 VERSION: 2.0.0
 """
 
-import os
 import re
+import warnings
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import pandas as pd
+import numpy as np
+from ..utils.logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 class DataStructureError(Exception):
@@ -56,6 +61,10 @@ class DataLoader:
         self.cell_folders = []
         self.all_organelles = []
         self.unique_cells = []
+
+        # Lookup dictionaries for O(1) access (built after find_cell_folders)
+        self._folder_lookup = {}  # (cell_id, organelle) -> folder info
+        self._cells_to_organelles = {}  # cell_id -> [organelles]
 
         # Regex patterns for parsing folder and file names
         # Pattern to extract cell ID: everything before the last organelle_Statistics
@@ -105,10 +114,10 @@ class DataLoader:
             # Structure 1: Direct (WITH LD)
             self.search_dir = self.parent_dir
             self.has_ld = True
-            print(f"[INFO] Structure: Direct - Dataset contains LD")
+            logger.info("Structure: Direct - Dataset contains LD")
         else:
             # Structure 2: Nested (WITHOUT LD)
-            print(f"[INFO] Structure: Nested - Searching subdirectories...")
+            logger.info("Structure: Nested - Searching subdirectories...")
 
             # Find subdirectories containing Statistics folders
             search_dirs = []
@@ -123,7 +132,7 @@ class DataLoader:
                     "No valid Statistics folders found in parent directory or subdirectories"
                 )
 
-            print(f"[INFO] Found {len(search_dirs)} subdirectories with data")
+            logger.info(f"Found {len(search_dirs)} subdirectories with data")
             # Use the first subdirectory (typically "Control")
             self.search_dir = search_dirs[0]
             self.has_ld = False
@@ -163,14 +172,14 @@ class DataLoader:
             # Extract cell ID
             cell_match = self.cell_id_pattern.match(folder_name)
             if not cell_match:
-                print(f"[WARNING] Could not parse cell ID from {folder_name}")
+                logger.warning(f"Could not parse cell ID from {folder_name}")
                 continue
             cell_id = cell_match.group(1)
 
             # Extract organelle
             org_match = self.organelle_pattern.search(folder_name)
             if not org_match:
-                print(f"[WARNING] Could not parse organelle from {folder_name}")
+                logger.warning(f"Could not parse organelle from {folder_name}")
                 continue
             organelle = org_match.group(1)
 
@@ -188,15 +197,38 @@ class DataLoader:
         self.unique_cells = sorted(set(f['cell_id'] for f in self.cell_folders))
         self.all_organelles = sorted(set(f['organelle'] for f in self.cell_folders))
 
-        print(f"[INFO] Found {len(self.unique_cells)} unique cells")
-        print(f"[INFO] Found {len(self.all_organelles)} unique organelles: {', '.join(self.all_organelles)}")
+        # Build lookup dictionaries for O(1) access (performance optimization)
+        self._build_lookup_dictionaries()
+
+        logger.info(f"Found {len(self.unique_cells)} unique cells")
+        logger.info(f"Found {len(self.all_organelles)} unique organelles: {', '.join(self.all_organelles)}")
 
         self._is_validated = True
         return True
 
+    def _build_lookup_dictionaries(self):
+        """
+        Build lookup dictionaries for fast O(1) access instead of O(n) linear searches.
+
+        This significantly improves performance for large datasets.
+        """
+        # Build (cell_id, organelle) -> folder_info lookup
+        self._folder_lookup = {
+            (f['cell_id'], f['organelle']): f
+            for f in self.cell_folders
+        }
+
+        # Build cell_id -> [organelles] lookup
+        self._cells_to_organelles = {}
+        for folder in self.cell_folders:
+            cell_id = folder['cell_id']
+            if cell_id not in self._cells_to_organelles:
+                self._cells_to_organelles[cell_id] = []
+            self._cells_to_organelles[cell_id].append(folder['organelle'])
+
     def load_distance_file(self, file_path: Path) -> pd.Series:
         """
-        Load a distance CSV file and return distance values.
+        Load a distance CSV file and return distance values with validation.
 
         Parameters:
         -----------
@@ -210,15 +242,52 @@ class DataLoader:
         Raises:
         -------
         IOError : If file cannot be read
+        ValueError : If data validation fails
+
+        Notes:
+        ------
+        - Negative distances are acceptable (indicate overlapping organelles in Imaris)
+        - Inf values are rejected (indicate processing errors)
+        - Warns if suspiciously large values detected (>1000 micrometers)
         """
         try:
-            # Skip first 4 rows (headers), no column names
-            df = pd.read_csv(file_path, skiprows=4, header=None)
+            # Skip first 4 rows (Imaris CSV headers), no column names
+            df = pd.read_csv(file_path, skiprows=4, header=None, encoding='utf-8')
+
+            # Validate file structure
+            if df.shape[1] < 1:
+                raise ValueError(f"File has no columns: {file_path.name}")
+
+            if df.shape[0] < 1:
+                raise ValueError(f"File has no data rows: {file_path.name}")
 
             # Extract first column and drop NaN values
             distances = df.iloc[:, 0].dropna()
 
+            # CRITICAL VALIDATION: Check for empty data
+            if len(distances) == 0:
+                raise ValueError(f"No valid distance values in {file_path.name}")
+
+            # CRITICAL VALIDATION: Ensure data is numeric
+            if not pd.api.types.is_numeric_dtype(distances):
+                raise ValueError(f"Distance data is not numeric in {file_path.name}")
+
+            # CRITICAL VALIDATION: Check for infinite values
+            if np.isinf(distances).any():
+                raise ValueError(f"Infinite values found in {file_path.name}")
+
+            # WARNING: Check for suspiciously large values (>1000 micrometers)
+            if (distances.abs() > 1000).any():
+                warnings.warn(
+                    f"Unusually large distance values (>1000 µm) found in {file_path.name}. "
+                    f"Max value: {distances.abs().max():.2f} µm. Please verify data quality.",
+                    UserWarning
+                )
+
             return distances
+
+        except pd.errors.EmptyDataError:
+            raise IOError(f"File is empty or has no data: {file_path.name}")
         except Exception as e:
             raise IOError(f"Error reading {file_path.name}: {str(e)}")
 
@@ -240,16 +309,14 @@ class DataLoader:
         if not self._is_validated:
             raise DataStructureError("Must call find_cell_folders() first")
 
-        # Find the folder for this cell and organelle
-        matching_folders = [
-            f for f in self.cell_folders
-            if f['cell_id'] == cell_id and f['organelle'] == source_organelle
-        ]
+        # Use O(1) dictionary lookup instead of O(n) linear search
+        key = (cell_id, source_organelle)
+        folder_info = self._folder_lookup.get(key)
 
-        if not matching_folders:
+        if folder_info is None:
             return []
 
-        source_folder = matching_folders[0]['full_path']
+        source_folder = folder_info['full_path']
 
         # Find all distance files
         distance_files = list(source_folder.glob('*Shortest_Distance_to_Surfaces_Surfaces*.csv'))
@@ -265,7 +332,7 @@ class DataLoader:
                 target_org = target_match.group(1)
                 result.append((file_path, target_org))
             else:
-                print(f"[WARNING] Could not identify target in {filename}")
+                logger.warning(f"Could not identify target in {filename}")
 
         return result
 
@@ -315,12 +382,9 @@ class DataLoader:
             'missing_data': []
         }
 
-        # Check for cells missing certain organelles
+        # Check for cells missing certain organelles (using optimized lookup)
         for cell_id in self.unique_cells:
-            cell_organelles = [
-                f['organelle'] for f in self.cell_folders
-                if f['cell_id'] == cell_id
-            ]
+            cell_organelles = self._cells_to_organelles.get(cell_id, [])
             missing = set(self.all_organelles) - set(cell_organelles)
             if missing:
                 report['missing_data'].append(
