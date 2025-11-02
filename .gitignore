@@ -2,8 +2,8 @@
 /Raw_data_for_Orgaplex_Test/
 /Old R_Scripts/
 
-# ignore these files
-/PHASE1_COMPLETE.md
-/CHANGES_v2.1.md 
+# ignore all markdown files except README.md
+*.md
+!README.md
 
 
