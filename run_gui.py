@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 GUI Launcher for Organelle Analysis Software
 

@@ -10,8 +10,6 @@ VERSION: 2.1.0
 
 import logging
 import sys
-from pathlib import Path
-from datetime import datetime
 
 
 def setup_logger(name: str, level: str = 'INFO', log_file: str = None) -> logging.Logger:
@@ -42,7 +40,7 @@ def setup_logger(name: str, level: str = 'INFO', log_file: str = None) -> loggin
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
 
-    # Format: [INFO] message  (simplified for end users)
+    # Format: [LEVEL] message (streamlined for readability)
     formatter = logging.Formatter('[%(levelname)s] %(message)s')
     console_handler.setFormatter(formatter)
 

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(chmod:*)",
       "Bash(/Users/philippkaintoch/anaconda3/envs/orgaplex/bin/python:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(xargs ls:*)",
+      "Bash(python3:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

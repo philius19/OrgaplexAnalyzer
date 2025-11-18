@@ -19,19 +19,17 @@ VERSION: 2.0.1
 
 import pandas as pd
 import numpy as np
-import warnings
 import sys
 from pathlib import Path
 from typing import Dict, List
 from datetime import datetime
 from .data_loader import DataLoader
 from ..utils.logging_config import get_logger
+from ..utils.sorting import sort_cell_ids
+from ..__version__ import __version__
 
 # Initialize logger
 logger = get_logger(__name__)
-
-# Software version
-__version__ = "2.1.0"
 
 
 class OneWayInteractionAnalyzer:
@@ -211,7 +209,7 @@ class OneWayInteractionAnalyzer:
             all_interactions.update(cell_data.keys())
 
         all_interactions = sorted(all_interactions)
-        all_cells = sorted(self.results.keys())
+        all_cells = sort_cell_ids(list(self.results.keys()))
 
         logger.info(f"Found {len(all_interactions)} unique interactions")
         logger.info(f"Found {len(all_cells)} cells")
@@ -242,13 +240,7 @@ class OneWayInteractionAnalyzer:
                     count_row[cell_id] = 0
                     missing_row[cell_id] = 'Missing'
                     missing_count += 1
-
-                    # Warn user about missing data
-                    warnings.warn(
-                        f"Missing data: {interaction} not found in {cell_id}. "
-                        f"This could indicate incomplete data collection or analysis failure.",
-                        UserWarning
-                    )
+                    logger.debug(f"Missing data: {interaction} not found in {cell_id}")
 
             mean_data.append(mean_row)
             count_data.append(count_row)
@@ -378,9 +370,8 @@ class OneWayInteractionAnalyzer:
         file_format : str
             Either 'excel' or 'csv'
         """
-        logger.info("=" * 60)
-        logger.info("ONE-WAY INTERACTION ANALYSIS")
-        logger.info("=" * 60)
+
+        logger.info("Starting One-Way Interaction Analysis")
 
         # Step 1: Load data
         self.load_data()
@@ -399,13 +390,13 @@ class OneWayInteractionAnalyzer:
         else:
             raise ValueError(f"Unsupported file format: {file_format}")
 
-        logger.info("=" * 60)
-        logger.info("ANALYSIS COMPLETE")
-        logger.info("=" * 60)
+        
+        logger.info("Analysis Complete")
+        
 
     def get_results_summary(self) -> str:
         """
-        Get a human-readable summary of analysis results.
+        Get a summary of analysis results.
 
         Returns:
         --------
@@ -415,9 +406,7 @@ class OneWayInteractionAnalyzer:
             return "No results available yet."
 
         summary = []
-        summary.append("=" * 60)
-        summary.append("ANALYSIS RESULTS SUMMARY")
-        summary.append("=" * 60)
+
         summary.append(f"Total cells analyzed: {len(self.results)}")
         summary.append(f"Total unique interactions: {len(self.mean_distance_df)}")
         summary.append(f"Output shape: {self.mean_distance_df.shape}")
@@ -432,5 +421,5 @@ class OneWayInteractionAnalyzer:
             mean_val = row[cell_columns].mean()
             summary.append(f"  {interaction_name}: mean = {mean_val:.3f}")
 
-        summary.append("=" * 60)
+        
         return "\n".join(summary)

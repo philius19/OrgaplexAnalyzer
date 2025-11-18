@@ -19,10 +19,11 @@ VERSION: 2.0.0
 import re
 import warnings
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 import pandas as pd
 import numpy as np
 from ..utils.logging_config import get_logger
+from ..utils.file_filters import filter_metadata_files
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -111,13 +112,13 @@ class DataLoader:
         has_statistics_dirs = any(d.name.endswith('_Statistics') for d in all_dirs)
 
         if has_statistics_dirs:
-            # Structure 1: Direct (WITH LD)
+            # Structure 1: Direct (with LD)
             self.search_dir = self.parent_dir
             self.has_ld = True
-            logger.info("Structure: Direct - Dataset contains LD")
+            logger.info("Structure: Direct -> Dataset contains LD")
         else:
-            # Structure 2: Nested (WITHOUT LD)
-            logger.info("Structure: Nested - Searching subdirectories...")
+            # Structure 2: Nested (without LD)
+            logger.info("Structure: Nested -> Searching subdirectories...")
 
             # Find subdirectories containing Statistics folders
             search_dirs = []
@@ -133,7 +134,7 @@ class DataLoader:
                 )
 
             logger.info(f"Found {len(search_dirs)} subdirectories with data")
-            # Use the first subdirectory (typically "Control")
+            # Use the first subdirectory (e.g. "Control")
             self.search_dir = search_dirs[0]
             self.has_ld = False
 
@@ -158,8 +159,11 @@ class DataLoader:
             raise DataStructureError("Must call detect_structure() first")
 
         # Find all directories ending with "_Statistics"
-        stat_dirs = [d for d in self.search_dir.iterdir()
-                     if d.is_dir() and d.name.endswith('_Statistics')]
+        # Filter out macOS metadata directories (._*)
+        stat_dirs = filter_metadata_files(
+            d for d in self.search_dir.iterdir()
+            if d.is_dir() and d.name.endswith('_Statistics')
+        )
 
         if not stat_dirs:
             raise DataStructureError("No folders ending with '_Statistics' found")
@@ -264,23 +268,23 @@ class DataLoader:
             # Extract first column and drop NaN values
             distances = df.iloc[:, 0].dropna()
 
-            # CRITICAL VALIDATION: Check for empty data
+            # Validation step: Check for empty data
             if len(distances) == 0:
                 raise ValueError(f"No valid distance values in {file_path.name}")
 
-            # CRITICAL VALIDATION: Ensure data is numeric
+            # Validation step: Ensure data is numeric
             if not pd.api.types.is_numeric_dtype(distances):
                 raise ValueError(f"Distance data is not numeric in {file_path.name}")
 
-            # CRITICAL VALIDATION: Check for infinite values
+            # Validation step: Check for infinite values
             if np.isinf(distances).any():
                 raise ValueError(f"Infinite values found in {file_path.name}")
 
-            # WARNING: Check for suspiciously large values (>1000 micrometers)
-            if (distances.abs() > 1000).any():
+            # Validate for unusually large values (>1000 micrometers)
+            if (distances.abs() > 100000).any():
                 warnings.warn(
-                    f"Unusually large distance values (>1000 µm) found in {file_path.name}. "
-                    f"Max value: {distances.abs().max():.2f} µm. Please verify data quality.",
+                    f"Unusually large distance values (>100 µm) found in {file_path.name}. "
+                    f"Max value: {distances.abs().max():.2f} nm. Please verify data quality.",
                     UserWarning
                 )
 
@@ -318,8 +322,10 @@ class DataLoader:
 
         source_folder = folder_info['full_path']
 
-        # Find all distance files
-        distance_files = list(source_folder.glob('*Shortest_Distance_to_Surfaces_Surfaces*.csv'))
+        # Find all distance files, excluding macOS metadata files
+        distance_files = filter_metadata_files(
+            source_folder.glob('*Shortest_Distance_to_Surfaces_Surfaces*.csv')
+        )
 
         # Extract target organelles
         result = []
@@ -358,7 +364,7 @@ class DataLoader:
         ]
         return sorted(set(cells))
 
-    def validate_data(self) -> Dict[str, any]:
+    def validate_data(self) -> Dict[str, Any]:
         """
         Perform comprehensive data validation.
 
@@ -395,7 +401,7 @@ class DataLoader:
 
     def get_summary(self) -> str:
         """
-        Get a human-readable summary of the loaded data.
+        Get a formatted summary of the loaded data.
 
         Returns:
         --------
@@ -405,15 +411,12 @@ class DataLoader:
             return "Data not yet loaded. Call detect_structure() and find_cell_folders() first."
 
         summary = []
-        summary.append("=" * 60)
-        summary.append("DATA LOADER SUMMARY")
-        summary.append("=" * 60)
+        summary.append("Data Readout:")
         summary.append(f"Dataset type: {'WITH LD' if self.has_ld else 'WITHOUT LD'}")
         summary.append(f"Search directory: {self.search_dir}")
         summary.append(f"Total cells: {len(self.unique_cells)}")
         summary.append(f"Total organelles: {len(self.all_organelles)}")
         summary.append(f"Organelles: {', '.join(self.all_organelles)}")
         summary.append(f"Cells: {', '.join(self.unique_cells)}")
-        summary.append("=" * 60)
 
         return "\n".join(summary)

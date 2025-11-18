@@ -1,14 +1,16 @@
-# Core dependencies for Orgaplex Analyzer v2.1
-# Tested with Python 3.11
+# Orgaplex-Analyzer v2.1.0 Dependencies
+# Installation: pip install -r requirements.txt
+# Recommended Python: 3.11 or 3.12
 
-# Data manipulation
+# Core dependencies
 pandas>=2.0.0,<2.2.0
 numpy>=1.24.0,<2.0.0
 
 # Excel export
 openpyxl>=3.1.0,<4.0.0
 
-# Testing dependencies (optional, for development)
+# Development dependencies (optional)
+# Uncomment for development/testing:
 # pytest>=7.4.0
 # pytest-cov>=4.1.0
 # pytest-mock>=3.11.1

@@ -1,9 +1,40 @@
-# ignore these folders
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project-specific
 /Raw_data_for_Orgaplex_Test/
 /Old R_Scripts/
+output/
 
-# ignore all markdown files except README.md
+# Logs
+*.log
+
+# Ignore all markdown files except README.md
 *.md
 !README.md
-
-
