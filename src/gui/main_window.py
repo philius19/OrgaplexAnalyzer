@@ -24,6 +24,8 @@ from datetime import datetime
 # Import core analysis modules
 from ..core.one_way_interaction import OneWayInteractionAnalyzer
 from ..core.vol_spher_metrics import VolSpherMetricsAnalyzer
+from ..core.nway_interaction import NWayInteractionAnalyzer
+from .bait_selection_dialog import BaitSelectionDialog
 from ..__version__ import __version__
 
 
@@ -205,6 +207,31 @@ class OrganelleAnalysisGUI:
         )
         volspher_radio.pack(side=tk.LEFT, padx=5)
         ToolTip(volspher_radio, "Calculate volume and sphericity statistics per organelle")
+
+        # N-Way Analysis options (second row)
+        row += 1
+        nway_frame = ttk.Frame(main_frame)
+        nway_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=5)
+
+        ttk.Label(nway_frame, text="N-Way Analysis:").pack(side=tk.LEFT, padx=(0, 20))
+
+        nway_single_radio = ttk.Radiobutton(
+            nway_frame,
+            text="Single Bait",
+            variable=self.analysis_type,
+            value='nway_single'
+        )
+        nway_single_radio.pack(side=tk.LEFT, padx=5)
+        ToolTip(nway_single_radio, "Multi-organelle contact patterns for a selected bait organelle")
+
+        nway_batch_radio = ttk.Radiobutton(
+            nway_frame,
+            text="Batch (All Baits)",
+            variable=self.analysis_type,
+            value='nway_batch'
+        )
+        nway_batch_radio.pack(side=tk.LEFT, padx=5)
+        ToolTip(nway_batch_radio, "Analyze ALL organelles as baits (generates one file per organelle)")
 
         # Output Format
         row += 1
@@ -424,6 +451,33 @@ class OrganelleAnalysisGUI:
                     analyzer = VolSpherMetricsAnalyzer(input_dir)
                     analyzer.run(str(output_path), file_format=file_format)
 
+                elif analysis_type == 'nway_single':
+                    # N-Way Analysis with Single Bait Selection
+                    # Step 1: Create analyzer and load data to detect organelles
+                    analyzer = NWayInteractionAnalyzer(input_dir, threshold=0.0)
+                    analyzer.load_data()
+                    available_orgs = analyzer.get_available_organelles()
+
+                    # Step 2: Show bait selection dialog (must run on main thread)
+                    # Store analyzer for use in callback
+                    self._nway_analyzer = analyzer
+                    self._nway_output_dir = output_dir
+                    self._nway_file_format = file_format
+
+                    # Schedule dialog on main thread
+                    self.root.after(0, lambda: self._show_bait_selection_dialog(available_orgs))
+                    return  # Exit thread - analysis continues in dialog callback
+
+                elif analysis_type == 'nway_batch':
+                    # N-Way Analysis - Batch Mode (all organelles as baits)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    batch_output_dir = output_dir / f"NWay_Analysis_Batch_{timestamp}"
+
+                    analyzer = NWayInteractionAnalyzer(input_dir, threshold=0.0)
+                    output_files = analyzer.run(str(batch_output_dir), file_format=file_format)
+
+                    self.update_status(f"\n[SUCCESS] Created {len(output_files)} output files")
+
                 else:
                     raise ValueError(f"Unknown analysis type: {analysis_type}")
 
@@ -465,6 +519,114 @@ class OrganelleAnalysisGUI:
         # Run in separate thread to keep GUI responsive
         self.analysis_thread = threading.Thread(target=self.run_analysis_thread, daemon=False)
         self.analysis_thread.start()
+
+    def _show_bait_selection_dialog(self, available_orgs):
+        """
+        Show bait selection dialog on main thread.
+
+        Called from run_analysis_thread via root.after() to ensure
+        dialog runs on main thread.
+        """
+        dialog = BaitSelectionDialog(self.root, available_orgs)
+        self.root.wait_window(dialog.dialog)
+
+        if dialog.result:
+            # User selected a bait - continue analysis in background thread
+            selected_bait = dialog.result[0]
+            self._nway_analyzer.set_bait_organelles([selected_bait])
+
+            # Continue analysis in new thread
+            self.analysis_thread = threading.Thread(
+                target=self._continue_nway_analysis,
+                daemon=False
+            )
+            self.analysis_thread.start()
+        else:
+            # User cancelled
+            self.update_status("[INFO] Analysis cancelled by user")
+            self.progress_bar.stop()
+            self.run_button.config(state='normal')
+
+    def _continue_nway_analysis(self):
+        """
+        Continue N-Way analysis after bait selection.
+
+        Runs in background thread after user selects bait from dialog.
+        """
+        import logging
+
+        # Custom handler to redirect logs to GUI
+        class GUILogHandler(logging.Handler):
+            def __init__(self, callback):
+                super().__init__()
+                self.callback = callback
+
+            def emit(self, record):
+                log_message = self.format(record)
+                self.callback(log_message)
+
+        try:
+            # Set up logging
+            gui_handler = GUILogHandler(self.update_status)
+            gui_handler.setLevel(logging.INFO)
+            formatter = logging.Formatter('[%(levelname)s] %(message)s')
+            gui_handler.setFormatter(formatter)
+
+            root_logger = logging.getLogger()
+            root_logger.addHandler(gui_handler)
+
+            try:
+                # Get stored parameters
+                analyzer = self._nway_analyzer
+                output_dir = self._nway_output_dir
+                file_format = self._nway_file_format
+
+                # Create output directory
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                bait_name = analyzer.bait_organelles[0] if analyzer.bait_organelles else "unknown"
+
+                if file_format == 'excel':
+                    final_output_dir = output_dir / f"NWay_Analysis_{bait_name}_{timestamp}"
+                else:
+                    final_output_dir = output_dir / f"NWay_Analysis_{bait_name}_{timestamp}"
+
+                # Run analysis
+                analyzer.analyze_all_baits()
+
+                # Export
+                if file_format == 'excel':
+                    output_files = analyzer.export_to_excel(str(final_output_dir))
+                else:
+                    output_files = analyzer.export_to_csv(str(final_output_dir))
+
+                self.update_status(f"\n[SUCCESS] Analysis complete! Created {len(output_files)} file(s)")
+
+            finally:
+                root_logger.removeHandler(gui_handler)
+
+            # Show success message
+            from tkinter import messagebox
+            messagebox.showinfo("Success", "N-Way Analysis completed successfully!")
+
+        except Exception as e:
+            self.update_status(f"\n[ERROR] {str(e)}")
+            from tkinter import messagebox
+            messagebox.showerror("Error", f"Analysis failed:\n{str(e)}")
+
+            import logging
+            logging.exception("N-Way analysis failed:")
+
+        finally:
+            self.progress_bar.stop()
+            self.run_button.config(state='normal')
+
+            # Clean up stored references
+            if hasattr(self, '_nway_analyzer'):
+                del self._nway_analyzer
+            if hasattr(self, '_nway_output_dir'):
+                del self._nway_output_dir
+            if hasattr(self, '_nway_file_format'):
+                del self._nway_file_format
 
     def on_closing(self):
         """Handle window close event."""

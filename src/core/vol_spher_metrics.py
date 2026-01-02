@@ -402,7 +402,7 @@ class VolSpherMetricsAnalyzer:
         if not self.results:
             return "No results available"
 
-        summary = ["Vol/Spher Metrics Analysis Summary", "=" * 40]
+        summary = ["Vol/Spher Metrics Analysis Summary"]
 
         for organelle, df in self.results.items():
             summary.append(f"\n{organelle}:")
