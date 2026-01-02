@@ -156,7 +156,7 @@ Files must contain numerical distance values (in micrometers or nanometers) star
 
 ### Data Organization
 
-Results are organized as **rows = interactions, columns = cells**:
+Results are organised as **rows = interactions, columns = cells**:
 
 | Interaction | cell_01 | cell_02 | cell_03 |
 |-------------|---------|---------|---------|
@@ -229,7 +229,7 @@ Validation failures halt analysis with detailed error messages.
 
 - Processing time: ~0.8 seconds per cell 
 - Memory usage: ~100 MB for 200 cells
-- Optimization: O(1) dictionary lookups for large datasets
+- Optimisation: O(1) dictionary lookups for large datasets
 
 ---
 
@@ -261,18 +261,194 @@ Orgaplex-Analyzer/
 
 ---
 
-## Customization
+## Customisation
 
-See `standalone_scripts/README.md` for examples of:
-- Computing additional statistics (median, standard deviation)
-- Filtering specific organelles
-- Applying distance thresholds
-- Custom output formats
+The standalone scripts are designed for easy modification by researchers with basic Python knowledge. Each script has a **CONFIGURATION** section at the top where you can modify parameters without touching complex code.
 
-Quick example:
+
+### Available Scripts
+
+| Script | Purpose | When to Use |
+|--------|---------|-------------|
+| `run_one_way_interaction.py` | Mean distances between organelle populations | Standard proximity analysis |
+| `run_vol_spher_metrics.py` | Volume and sphericity per organelle | Morphological analysis |
+| `run_nway_interaction.py` | Multi-organelle contact patterns | Complex network analysis |
+
+### Configuration Examples
+
+#### Example 1: Analyse Only ER-Mitochondria Contacts
+
+**Goal**: Focus on ER-to-Mitochondria interactions, ignore all others
+
+**Steps**:
+1. Open `standalone_scripts/run_one_way_interaction.py`
+2. Find the CONFIGURATION section (around line 35)
+3. Modify this line:
+   ```python
+   INTERACTION_FILTER = ['ER-to-M', 'M-to-ER']  # Only ER-mito interactions
+   ```
+4. Run normally:
+   ```bash
+   python standalone_scripts/run_one_way_interaction.py \
+     --input /path/to/data --output er_mito_results.xlsx
+   ```
+
+**Result**: Output Excel will only contain ER-M and M-ER interactions
+
+**Biological Context**: Useful for focused mitochondria-associated ER membrane (MAM) studies without distraction from other organelles.
+
+---
+
+#### Example 2: Calculate Median Instead of Mean
+
+**Goal**: Get median distances instead of mean (more robust to outliers)
+
+**Steps**:
+1. Copy the script:
+   ```bash
+   cp standalone_scripts/run_one_way_interaction.py my_median_analysis.py
+   ```
+
+2. Open `my_median_analysis.py` and add custom analysis after imports:
+   ```python
+   from src.core.one_way_interaction import OneWayInteractionAnalyzer
+   import numpy as np
+
+   class MedianAnalyzer(OneWayInteractionAnalyzer):
+       def analyze_cell(self, cell_id):
+           result = {}
+           for source_org in self.data_loader.all_organelles:
+               distance_files = self.data_loader.get_distance_files(cell_id, source_org)
+               for file_path, target_org in distance_files:
+                   try:
+                       distances = self.data_loader.load_distance_file(file_path)
+                       interaction = f"{source_org}-to-{target_org}"
+                       result[interaction] = {
+                           'mean': np.median(distances),  # Changed from mean to median
+                           'count': len(distances)
+                       }
+                   except Exception as e:
+                       pass
+           return result
+   ```
+
+3. In `main()`, replace line ~120:
+   ```python
+   analyzer = MedianAnalyzer(str(input_path))  # Use custom class
+   ```
+
+4. Run:
+   ```bash
+   python my_median_analysis.py --input data/ --output median_results.xlsx
+   ```
+
+**When to use**: Publications requiring non-parametric statistics, or when distance distributions are heavily skewed.
+
+---
+
+#### Example 3: Batch Process Multiple Datasets
+
+**Goal**: Run analysis on multiple experiment folders automatically
+
+**Steps**:
+1. Create a new script `batch_process.py`:
+   ```python
+   #!/usr/bin/env python3
+   import subprocess
+   from pathlib import Path
+
+   # List your experiment directories
+   experiments = [
+       "/path/to/control_replicate1",
+       "/path/to/control_replicate2",
+       "/path/to/treatment_replicate1",
+   ]
+
+   for exp_dir in experiments:
+       exp_name = Path(exp_dir).name
+       output_file = f"results_{exp_name}.xlsx"
+
+       print(f"\nProcessing: {exp_name}")
+       subprocess.run([
+           "python", "standalone_scripts/run_one_way_interaction.py",
+           "--input", exp_dir,
+           "--output", output_file,
+           "--format", "excel"
+       ])
+
+   print("\nAll experiments processed!")
+   ```
+
+2. Run:
+   ```bash
+   python batch_process.py
+   ```
+
+**When to use**: High-throughput experiments with consistent folder structures.
+
+---
+
+### Parameter Reference
+
+#### Common Parameters (All Scripts)
+
+**OUTPUT_FORMAT**
+```python
+OUTPUT_FORMAT = 'excel'  # Single .xlsx file with multiple sheets
+OUTPUT_FORMAT = 'csv'    # Multiple .csv files in output directory
+```
+
+**Context**: Excel is better for small-to-medium datasets. CSV is better for large datasets or R/Python downstream analysis.
+
+---
+
+#### One-Way Interaction Parameters
+
+**DISTANCE_THRESHOLD** (Filter interactions by distance)
+```python
+DISTANCE_THRESHOLD = None   # No filtering (report all distances)
+```
+
+**Context**: In Imaris, negative distances mean overlap. Setting `0.0` counts only direct contacts. 
+
+**INTERACTION_FILTER** (Analyse specific organelle pairs)
+```python
+INTERACTION_FILTER = None                    # All interactions
+INTERACTION_FILTER = ['ER-to-M', 'ER-to-LD'] # Only ER relationships
+```
+
+---
+
+#### N-Way Interaction Parameters
+
+**CONTACT_THRESHOLD** (Define "contact")
+```python
+CONTACT_THRESHOLD = 0.0   # Only overlaps (negative distances)
+```
+
+
+**BAIT_ORGANELLES** (Which organelles to analyse)
+```python
+BAIT_ORGANELLES = None        # Interactive mode (prompts you)
+BAIT_ORGANELLES = ['ER']      # Only analyze ER
+BAIT_ORGANELLES = ['ER', 'M'] # ER and mitochondria
+```
+
+
+---
+
+### Getting Help
+
+See `standalone_scripts/README.md` for:
+- Complete script documentation
+- More customisation examples
+- Parameter descriptions
+- Troubleshooting tips
+
+Quick template:
 ```bash
 cp standalone_scripts/run_one_way_interaction.py my_custom_script.py
-# Edit my_custom_script.py to add custom logic
+# Edit CONFIGURATION section
 python my_custom_script.py --input data/ --output results.xlsx
 ```
 
@@ -295,84 +471,14 @@ python my_custom_script.py --input data/ --output results.xlsx
 **Error**: "No valid distance values found"
 **Solution**: Verify CSV files contain numeric data starting at row 5. Check files are not empty.
 
----
-
-## Development Roadmap
-
-### Completed (v2.0 - v2.1)
-- Modular architecture
-- One-way interaction analysis
-- Data validation framework
-- Professional logging
-- Missing data tracking
-- Performance optimization (11x speedup)
-
-### Planned (v2.2+)
-- Six-way interaction analysis (bidirectional comparisons)
-- Volume calculations per organelle
-- Surface area quantification
-- Radial distribution functions
-- Batch processing automation
-- Unit test coverage (pytest)
 
 ---
 
-## Citation
-
-If you use this software in publications, please cite:
-
-```
-Kaintoch, P. (2025). Orgaplex-Analyzer v2.1: Python software for
-quantitative organelle interaction analysis.
-https://github.com/philius19/orgaplex-analyzer
-```
-
-
----
-
-## License
-
-Following
-
----
-
-## Changelog
-
-### v2.2.0 (November 2025)
-- Added Vol/Spher-Metrics analysis module (volume and sphericity statistics per organelle)
-- Implemented natural sorting for cell columns (fixes: 1h LPS 1, 1h LPS 2, ..., 1h LPS 10)
-- Fixed macOS metadata file errors (eliminates ~7,000 false errors from `._` files)
-- Centralized file filtering utilities for consistent data processing
-- GUI now supports both One-Way Interactions and Vol/Spher-Metrics analysis types
-
-### v2.1.0 (November 2025)
-- Added comprehensive data validation
-- Implemented professional logging framework
-- Added metadata tracking for reproducibility
-- Implemented missing data warnings and completeness reports
-- Performance optimization (O(1) dictionary lookups)
-- Removed unused code and imports
-- Centralized version management
-- Added conda environment specification
-
-### v2.0.0 (November 2025)
-- Complete rewrite from R to Python
-- Modular architecture
-- New output format (rows = interactions, columns = cells)
-- GUI and command-line interfaces
-- Standalone customizable scripts
-
----
 
 ## Contact
 
 For bugs, feature requests, or questions:
-<<<<<<< HEAD
-- GitHub Issues: p.kaintoch@uni-muenster.de
 - Email: p.kaintoch@uni-muenster.de
-=======
-- GitHub Issues: [p.kaintoch@uni-muenster.de]
-- Email: [p.kaintoch@uni-muenster.de]
->>>>>>> b243a3a4b3dde58a7c7b53049743bdf5185fad6a
+
 
 ---

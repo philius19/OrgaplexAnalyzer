@@ -10,9 +10,9 @@ Or make it executable and run directly:
     chmod +x run_gui.py
     ./run_gui.py
 
-AUTHOR: Philipp Kaintoch
-DATE: 2025-11-02
-VERSION: 2.0.0
+Author: Philipp Kaintoch
+Date: 2026-02-01
+Version: 3.0.0
 """
 
 import sys
