@@ -1,19 +1,9 @@
 """
 Data Loader Module for Organelle Analysis
 
-This module handles data extraction and validation from Imaris-generated
-segmentation data. It provides a central control instance to ensure data
-is loaded correctly.
-
-Key Features:
-- Automatic folder structure detection (LD vs non-LD datasets)
-- Pattern-based organelle recognition (no hardcoded organelles)
-- Robust file parsing with error handling
-- Data validation and integrity checks
+Handles data extraction and validation from Imaris-generated segmentation data.
 
 Author: Philipp Kaintoch
-Date: 2025-11-18
-Version: 2.2.0
 """
 
 import re
@@ -342,6 +332,29 @@ class DataLoader:
 
         return result
 
+    def get_folder_path(self, cell_id: str, organelle: str) -> Path:
+        """
+        Get the folder path for a specific cell and organelle.
+
+        Parameters:
+        -----------
+        cell_id : str
+            Cell identifier (e.g., "control_1")
+        organelle : str
+            Organelle name (e.g., "ER")
+
+        Returns:
+        --------
+        Path or None : Full path to the Statistics folder, or None if not found
+        """
+        if not self._is_validated:
+            raise DataStructureError("Must call find_cell_folders() first")
+
+        folder_info = self._folder_lookup.get((cell_id, organelle))
+        if folder_info is None:
+            return None
+        return folder_info['full_path']
+
     def get_cells_by_organelle(self, organelle: str) -> List[str]:
         """
         Get all cells that have data for a specific organelle.
@@ -412,7 +425,7 @@ class DataLoader:
 
         summary = []
         summary.append("Data Readout:")
-        summary.append(f"Dataset type: {'WITH LD' if self.has_ld else 'WITHOUT LD'}")
+        summary.append(f"Dataset type: {'With LD' if self.has_ld else 'Without LD'}")
         summary.append(f"Search directory: {self.search_dir}")
         summary.append(f"Total cells: {len(self.unique_cells)}")
         summary.append(f"Total organelles: {len(self.all_organelles)}")

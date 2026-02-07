@@ -1,11 +1,7 @@
 """
 File Filtering Utilities
 
-Provides centralized filtering for macOS metadata files and other exclusions.
-
 Author: Philipp Kaintoch
-Date: 2025-11-18
-Version: 2.2.0
 """
 
 from pathlib import Path

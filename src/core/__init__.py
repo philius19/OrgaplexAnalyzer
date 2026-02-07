@@ -12,6 +12,7 @@ from .data_loader import DataLoader, DataStructureError
 from .one_way_interaction import OneWayInteractionAnalyzer
 from .vol_spher_metrics import VolSpherMetricsAnalyzer
 from .nway_interaction import NWayInteractionAnalyzer
+from .radial_distribution import RadialDistributionAnalyzer
 
 __all__ = [
     'DataLoader',
@@ -19,4 +20,5 @@ __all__ = [
     'OneWayInteractionAnalyzer',
     'VolSpherMetricsAnalyzer',
     'NWayInteractionAnalyzer',
+    'RadialDistributionAnalyzer',
 ]

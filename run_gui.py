@@ -1,18 +1,10 @@
 """
 GUI Launcher for Organelle Analysis Software
 
-This script launches the graphical user interface for the organelle analysis software.
-
 USAGE:
     python run_gui.py
 
-Or make it executable and run directly:
-    chmod +x run_gui.py
-    ./run_gui.py
-
 Author: Philipp Kaintoch
-Date: 2026-02-01
-Version: 3.0.0
 """
 
 import sys

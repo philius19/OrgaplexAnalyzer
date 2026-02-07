@@ -36,6 +36,7 @@ setup(
         "pandas>=2.0.0,<2.2.0",
         "numpy>=1.24.0,<2.0.0",
         "openpyxl>=3.1.0,<4.0.0",
+        "matplotlib>=3.8.0",
     ],
     entry_points={
         "console_scripts": [

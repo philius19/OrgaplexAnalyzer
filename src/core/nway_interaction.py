@@ -18,22 +18,19 @@ Output Format:
 
 Author: Philipp Kaintoch
 Date: 2025-11-18
-Version: 2.2.0
 """
 
 import itertools
 import pandas as pd
 import numpy as np
-import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 from datetime import datetime
 from .data_loader import DataLoader
 from ..utils.logging_config import get_logger
 from ..utils.sorting import sort_cell_ids
-from ..__version__ import __version__
+from ..utils.metadata import generate_base_metadata
 
-# Initialize logger
 logger = get_logger(__name__)
 
 
@@ -350,44 +347,22 @@ class NWayInteractionAnalyzer:
         logger.info(f"\nAnalysis complete. Generated results for {len(self.results)} baits.")
 
     def _generate_metadata(self, bait: str) -> Dict[str, str]:
-        """
-        Generate metadata for a specific bait analysis.
-
-        Parameters:
-        -----------
-        bait : str
-            Bait organelle name
-
-        Returns:
-        --------
-        Dict[str, str] : Metadata dictionary
-        """
-        # Get target organelles for this bait
         if bait in self.results:
             df = self.results[bait]
-            # Columns minus Cell_ID and Surface_count = combination names
             combo_cols = [c for c in df.columns if c not in ['Cell_ID', 'Surface_count']]
             num_combos = len(combo_cols)
         else:
             num_combos = 'N/A'
 
-        metadata = {
-            'Software': 'Orgaplex-Analyzer',
-            'Version': __version__,
-            'Analysis_Type': 'N-Way Interaction Analysis',
-            'Bait_Organelle': bait,
-            'Contact_Threshold': str(self.threshold),
-            'Total_Combinations': str(num_combos),
-            'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Python_Version': sys.version.split()[0],
-            'Pandas_Version': pd.__version__,
-            'NumPy_Version': np.__version__,
-            'Input_Directory': str(self.input_dir),
-            'Total_Cells_Analyzed': str(len(self.results.get(bait, []))),
-            'All_Organelles': ', '.join(self.data_loader.all_organelles),
-        }
-
-        return metadata
+        return generate_base_metadata(
+            input_dir=self.input_dir,
+            analysis_type='N-Way Interaction Analysis',
+            Bait_Organelle=bait,
+            Contact_Threshold=str(self.threshold),
+            Total_Combinations=str(num_combos),
+            Total_Cells_Analyzed=str(len(self.results.get(bait, []))),
+            All_Organelles=', '.join(self.data_loader.all_organelles),
+        )
 
     def export_to_excel(self, output_dir: str) -> List[str]:
         """

@@ -1,11 +1,7 @@
 """
 Sorting Utilities for Orgaplex-Analyzer
 
-Provides natural numerical sorting for cell identifiers and labels.
-
 Author: Philipp Kaintoch
-Date: 2025-11-18
-Version: 2.2.0
 """
 
 import re

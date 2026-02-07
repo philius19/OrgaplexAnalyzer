@@ -4,31 +4,19 @@ One-Way Interaction Analysis Module
 This module analyzes one-way organelle interactions from Imaris-generated
 segmentation data. It calculates mean distances between organelles for each cell.
 
-Output Format:
-    Row per interaction, columns for each cell
-    Example:
-        Interaction  | control_1 | control_2 | control_3 | ...
-        ER-to-LD     | 5.87      | 6.12      | 7.33      | ...
-        ER-to-Ly     | 0.27      | 0.31      | 0.09      | ...
-        M-to-ER      | 0.001     | 0.013     | 0.000     | ...
-
 Author: Philipp Kaintoch
 Date: 2025-11-18
-Version: 2.2.0
 """
 
 import pandas as pd
 import numpy as np
-import sys
 from pathlib import Path
 from typing import Dict, List
-from datetime import datetime
 from .data_loader import DataLoader
 from ..utils.logging_config import get_logger
 from ..utils.sorting import sort_cell_ids
-from ..__version__ import __version__
+from ..utils.metadata import generate_base_metadata
 
-# Initialize logger
 logger = get_logger(__name__)
 
 
@@ -58,28 +46,14 @@ class OneWayInteractionAnalyzer:
         self.metadata = {}  # Store provenance information
 
     def _generate_metadata(self) -> Dict[str, str]:
-        """
-        Generate metadata for data provenance and reproducibility.
-
-        Returns:
-        --------
-        dict : Metadata including software version, timestamp, environment info
-        """
-        metadata = {
-            'Software': 'Orgaplex-Analyzer',
-            'Version': __version__,
-            'Analysis_Type': 'One-Way Interaction Analysis',
-            'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Python_Version': sys.version.split()[0],
-            'Pandas_Version': pd.__version__,
-            'NumPy_Version': np.__version__,
-            'Input_Directory': str(self.input_dir),
-            'Total_Cells': str(len(self.data_loader.unique_cells)) if hasattr(self.data_loader, 'unique_cells') else 'N/A',
-            'Total_Organelles': str(len(self.data_loader.all_organelles)) if hasattr(self.data_loader, 'all_organelles') else 'N/A',
-            'Organelles_List': ', '.join(self.data_loader.all_organelles) if hasattr(self.data_loader, 'all_organelles') else 'N/A',
-            'Total_Interactions': str(len(self.mean_distance_df)) if self.mean_distance_df is not None else 'N/A',
-        }
-
+        metadata = generate_base_metadata(
+            input_dir=self.input_dir,
+            analysis_type='One-Way Interaction Analysis',
+            Total_Cells=str(len(self.data_loader.unique_cells)) if hasattr(self.data_loader, 'unique_cells') else 'N/A',
+            Total_Organelles=str(len(self.data_loader.all_organelles)) if hasattr(self.data_loader, 'all_organelles') else 'N/A',
+            Organelles_List=', '.join(self.data_loader.all_organelles) if hasattr(self.data_loader, 'all_organelles') else 'N/A',
+            Total_Interactions=str(len(self.mean_distance_df)) if self.mean_distance_df is not None else 'N/A',
+        )
         self.metadata = metadata
         return metadata
 
