@@ -255,12 +255,14 @@ class OrganelleAnalysisGUI:
         self.status_text['yscrollcommand'] = scrollbar.set
 
     def browse_input_dir(self):
-        directory = filedialog.askdirectory(title="Select Input Directory")
+        initial = self.input_dir.get() or str(Path.home())
+        directory = filedialog.askdirectory(title="Select Input Directory", initialdir=initial)
         if directory:
             self.input_dir.set(directory)
 
     def browse_output_dir(self):
-        directory = filedialog.askdirectory(title="Select Output Directory")
+        initial = self.output_dir.get() or self.input_dir.get() or str(Path.home())
+        directory = filedialog.askdirectory(title="Select Output Directory", initialdir=initial)
         if directory:
             self.output_dir.set(directory)
 

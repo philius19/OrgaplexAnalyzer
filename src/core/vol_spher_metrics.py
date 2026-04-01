@@ -51,51 +51,6 @@ class VolSpherMetricsAnalyzer:
             if line.strip():
                 logger.info(line)
 
-    def load_metric_file(self, file_path: Path, metric_name: str) -> pd.Series:
-        """
-        Load a Volume or Sphericity CSV file from Imaris.
-
-        Raises ValueError if data validation fails.
-        """
-        try:
-            df = pd.read_csv(file_path, skiprows=4, header=None, encoding='utf-8')
-
-            if df.shape[1] < 1:
-                raise ValueError(f"File has no columns: {file_path.name}")
-            if df.shape[0] < 1:
-                raise ValueError(f"File has no data rows: {file_path.name}")
-
-            values = df.iloc[:, 0].dropna()
-
-            if len(values) == 0:
-                raise ValueError(f"No valid {metric_name} values in {file_path.name}")
-            if not pd.api.types.is_numeric_dtype(values):
-                raise ValueError(f"{metric_name} data is not numeric in {file_path.name}")
-            if np.isinf(values).any():
-                raise ValueError(f"Infinite {metric_name} values found in {file_path.name}")
-
-            if metric_name == "Sphericity":
-                if (values < 0).any() or (values > 1).any():
-                    logger.warning(
-                        f"Sphericity values outside expected range [0, 1] in {file_path.name}. "
-                        f"Min: {values.min():.3f}, Max: {values.max():.3f}"
-                    )
-            elif metric_name == "Volume":
-                if (values < 0).any():
-                    raise ValueError(f"Negative volume values found in {file_path.name}")
-                if (values > 1000).any():
-                    logger.warning(
-                        f"Unusually large volume values (>1000 um^3) in {file_path.name}. "
-                        f"Max: {values.max():.3f}"
-                    )
-
-            return values
-
-        except pd.errors.EmptyDataError:
-            raise ValueError(f"File is empty or has no data: {file_path.name}")
-        except Exception as e:
-            raise IOError(f"Failed to read {file_path.name}: {e}")
-
     def analyze_organelle(self, organelle: str) -> pd.DataFrame:
         """
         Analyze all cells for a specific organelle.
@@ -125,7 +80,7 @@ class VolSpherMetricsAnalyzer:
             # Volume metrics
             if volume_file.exists():
                 try:
-                    volumes = self.load_metric_file(volume_file, "Volume")
+                    volumes = self.data_loader.load_metric_file(volume_file, "Volume")
                     cell_metrics['Mean_Volume'] = volumes.mean()
                     cell_metrics['Count_Volume'] = len(volumes)
                     cell_metrics['Total_Volume'] = volumes.sum()
@@ -146,7 +101,7 @@ class VolSpherMetricsAnalyzer:
             # Sphericity metrics
             if sphericity_file.exists():
                 try:
-                    sphericity = self.load_metric_file(sphericity_file, "Sphericity")
+                    sphericity = self.data_loader.load_metric_file(sphericity_file, "Sphericity")
                     cell_metrics['Mean_Sphericity'] = sphericity.mean()
                     cell_metrics['Count_Sphericity'] = len(sphericity)
                 except Exception as e:

@@ -76,43 +76,6 @@ class RadialDistributionAnalyzer:
         self.bin_width = bin_width
         self.max_distance = max_distance
 
-    def load_metric_file(self, file_path: Path, metric_name: str) -> pd.Series:
-        """
-        Load a Volume or Distance CSV file from Imaris.
-
-        Returns raw Series WITHOUT dropna to preserve row alignment for pairing.
-        """
-        try:
-            df = pd.read_csv(file_path, skiprows=4, header=None, encoding='utf-8')
-
-            if df.shape[1] < 1:
-                raise ValueError(f"File has no columns: {file_path.name}")
-            if df.shape[0] < 1:
-                raise ValueError(f"File has no data rows: {file_path.name}")
-
-            values = df.iloc[:, 0]
-
-            if values.dropna().empty:
-                raise ValueError(f"No valid {metric_name} values in {file_path.name}")
-            if not pd.api.types.is_numeric_dtype(values):
-                raise ValueError(f"{metric_name} data is not numeric in {file_path.name}")
-            if np.isinf(values).any():
-                raise ValueError(f"Infinite {metric_name} values found in {file_path.name}")
-
-            if metric_name == "Volume":
-                non_nan = values.dropna()
-                if (non_nan < 0).any():
-                    raise ValueError(f"Negative volume values found in {file_path.name}")
-
-            return values
-
-        except pd.errors.EmptyDataError:
-            raise ValueError(f"File is empty or has no data: {file_path.name}")
-        except Exception as e:
-            if isinstance(e, ValueError):
-                raise
-            raise IOError(f"Failed to read {file_path.name}: {e}")
-
     def analyze_cell(self, cell_id: str) -> Optional[pd.Series]:
         folder = self.data_loader.get_folder_path(cell_id, self.organelle)
         if folder is None:
@@ -126,8 +89,8 @@ class RadialDistributionAnalyzer:
             return None
 
         try:
-            volumes = self.load_metric_file(vol_file, "Volume")
-            distances = self.load_metric_file(dist_file, "Distance")
+            volumes = self.data_loader.load_metric_file(vol_file, "Volume", drop_na=False)
+            distances = self.data_loader.load_metric_file(dist_file, "Distance", drop_na=False)
         except Exception as e:
             logger.error(f"Failed to load data for {cell_id}: {e}")
             return None

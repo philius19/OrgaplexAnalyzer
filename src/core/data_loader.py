@@ -7,7 +7,6 @@ Author: Philipp Kaintoch
 """
 
 import re
-import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import pandas as pd
@@ -220,70 +219,102 @@ class DataLoader:
                 self._cells_to_organelles[cell_id] = []
             self._cells_to_organelles[cell_id].append(folder['organelle'])
 
-    def load_distance_file(self, file_path: Path) -> pd.Series:
+    def load_metric_file(self, file_path: Path, metric_name: str, drop_na: bool = True) -> pd.Series:
         """
-        Load a distance CSV file and return distance values with validation.
+        Load an Imaris CSV metric file and return validated values.
+
+        Central data loading method for all metric types (Distance, Volume, Sphericity).
 
         Parameters:
         -----------
         file_path : Path
             Path to the CSV file
+        metric_name : str
+            Type of metric: 'Distance', 'Volume', or 'Sphericity'
+        drop_na : bool
+            If True, drop NaN values before returning (default).
+            Set to False to preserve row alignment for paired data (e.g. radial distribution).
 
         Returns:
         --------
-        pd.Series : Series containing distance values
+        pd.Series : Series containing validated metric values
 
         Raises:
         -------
-        IOError : If file cannot be read
         ValueError : If data validation fails
-
-        Notes:
-        ------
-        - Negative distances are acceptable (indicate overlapping organelles in Imaris)
-        - Inf values are rejected (indicate processing errors)
-        - Warns if suspiciously large values detected (>1000 micrometers)
+        IOError : If file cannot be read
         """
         try:
-            # Skip first 4 rows (Imaris CSV headers), no column names
             df = pd.read_csv(file_path, skiprows=4, header=None, encoding='utf-8')
 
-            # Validate file structure
             if df.shape[1] < 1:
                 raise ValueError(f"File has no columns: {file_path.name}")
-
             if df.shape[0] < 1:
                 raise ValueError(f"File has no data rows: {file_path.name}")
 
-            # Extract first column and drop NaN values
-            distances = df.iloc[:, 0].dropna()
+            values = df.iloc[:, 0]
 
-            # Validation step: Check for empty data
-            if len(distances) == 0:
-                raise ValueError(f"No valid distance values in {file_path.name}")
+            # Validate non-empty
+            if values.dropna().empty:
+                raise ValueError(f"No valid {metric_name} values in {file_path.name}")
 
-            # Validation step: Ensure data is numeric
-            if not pd.api.types.is_numeric_dtype(distances):
-                raise ValueError(f"Distance data is not numeric in {file_path.name}")
+            # Validate numeric
+            if not pd.api.types.is_numeric_dtype(values):
+                raise ValueError(f"{metric_name} data is not numeric in {file_path.name}")
 
-            # Validation step: Check for infinite values
-            if np.isinf(distances).any():
-                raise ValueError(f"Infinite values found in {file_path.name}")
+            # Reject infinite values
+            if np.isinf(values).any():
+                raise ValueError(f"Infinite {metric_name} values found in {file_path.name}")
 
-            # Validate for unusually large values (>1000 micrometers)
-            if (distances.abs() > 100000).any():
-                warnings.warn(
-                    f"Unusually large distance values (>100 µm) found in {file_path.name}. "
-                    f"Max value: {distances.abs().max():.2f} nm. Please verify data quality.",
-                    UserWarning
-                )
+            # Metric-specific validation
+            if metric_name == "Distance":
+                if (values.dropna().abs() > 100000).any():
+                    logger.warning(
+                        f"Unusually large distance values (>100,000 µm) in {file_path.name}. "
+                        f"Max: {values.dropna().abs().max():.2f} µm. Please verify data quality."
+                    )
 
-            return distances
+            elif metric_name == "Volume":
+                non_nan = values.dropna()
+                neg_count = (non_nan < 0).sum()
+                if neg_count > 0:
+                    logger.warning(
+                        f"{neg_count} negative volume value(s) excluded in {file_path.name}. "
+                        f"Min: {non_nan.min():.3f}"
+                    )
+                    values = values.where(values >= 0)
+                if values.dropna().max() > 1000:
+                    logger.warning(
+                        f"Unusually large volume values (>1000 µm³) in {file_path.name}. "
+                        f"Max: {values.dropna().max():.3f}"
+                    )
+
+            elif metric_name == "Sphericity":
+                non_nan = values.dropna()
+                out_of_range = (non_nan < 0) | (non_nan > 1)
+                out_count = out_of_range.sum()
+                if out_count > 0:
+                    logger.warning(
+                        f"{out_count} sphericity value(s) outside [0, 1] excluded in {file_path.name}. "
+                        f"Min: {non_nan.min():.3f}, Max: {non_nan.max():.3f}"
+                    )
+                    values = values.where((values >= 0) & (values <= 1))
+
+            if drop_na:
+                values = values.dropna()
+
+            return values
 
         except pd.errors.EmptyDataError:
-            raise IOError(f"File is empty or has no data: {file_path.name}")
+            raise ValueError(f"File is empty or has no data: {file_path.name}")
         except Exception as e:
-            raise IOError(f"Error reading {file_path.name}: {str(e)}")
+            if isinstance(e, ValueError):
+                raise
+            raise IOError(f"Failed to read {file_path.name}: {e}")
+
+    def load_distance_file(self, file_path: Path) -> pd.Series:
+        """Load a distance CSV file. Convenience wrapper around load_metric_file."""
+        return self.load_metric_file(file_path, metric_name="Distance", drop_na=True)
 
     def get_distance_files(self, cell_id: str, source_organelle: str) -> List[Tuple[Path, str]]:
         """
