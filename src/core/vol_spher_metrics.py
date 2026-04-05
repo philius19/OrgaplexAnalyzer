@@ -1,7 +1,7 @@
 """
-Volume and Sphericity Metrics Analysis Module
+Morphology Metrics Analysis Module
 
-Analyzes volume and sphericity statistics for organelles from Imaris-generated
+Analyzes volume, sphericity, and area statistics for organelles from Imaris-generated
 CSV files.
 
 Author: Philipp Kaintoch
@@ -20,14 +20,14 @@ from ..utils.metadata import generate_base_metadata
 logger = get_logger(__name__)
 
 
-class VolSpherMetricsAnalyzer:
+class MorphologyMetricsAnalyzer:
     """
     Analyzes volume and sphericity metrics from Imaris CSV exports.
 
     Output Format:
     --------------
     Excel file with one sheet per organelle:
-    - Rows: Metrics (Mean_Sphericity, Count_Sphericity, Mean_Volume, Count_Volume, Total_Volume, Max_Volume)
+    - Rows: Metrics (Mean_Sphericity, Count_Sphericity, Mean_Volume, Count_Volume, Total_Volume, Max_Volume, Mean_Area, Count_Area, Total_Area, Max_Area)
     - Columns: Cells (numerically sorted)
     """
 
@@ -74,6 +74,7 @@ class VolSpherMetricsAnalyzer:
 
             volume_file = folder / f"{cell_id}_{organelle}_Volume.csv"
             sphericity_file = folder / f"{cell_id}_{organelle}_Sphericity.csv"
+            area_file = folder / f"{cell_id}_{organelle}_Area.csv"
 
             cell_metrics = {}
 
@@ -113,6 +114,27 @@ class VolSpherMetricsAnalyzer:
                 cell_metrics['Mean_Sphericity'] = np.nan
                 cell_metrics['Count_Sphericity'] = 0
 
+            # Area metrics
+            if area_file.exists():
+                try:
+                    areas = self.data_loader.load_metric_file(area_file, "Area")
+                    cell_metrics['Mean_Area'] = areas.mean()
+                    cell_metrics['Count_Area'] = len(areas)
+                    cell_metrics['Total_Area'] = areas.sum()
+                    cell_metrics['Max_Area'] = areas.max()
+                except Exception as e:
+                    logger.error(f"Failed to process {area_file.name}: {e}")
+                    cell_metrics['Mean_Area'] = np.nan
+                    cell_metrics['Count_Area'] = 0
+                    cell_metrics['Total_Area'] = np.nan
+                    cell_metrics['Max_Area'] = np.nan
+            else:
+                logger.warning(f"Missing area file for {cell_id} ({organelle})")
+                cell_metrics['Mean_Area'] = np.nan
+                cell_metrics['Count_Area'] = 0
+                cell_metrics['Total_Area'] = np.nan
+                cell_metrics['Max_Area'] = np.nan
+
             results_dict[cell_id] = cell_metrics
 
         df = pd.DataFrame(results_dict)
@@ -121,7 +143,8 @@ class VolSpherMetricsAnalyzer:
             df = df[sort_cell_ids(list(df.columns))]
             row_order = [
                 'Mean_Sphericity', 'Count_Sphericity',
-                'Mean_Volume', 'Count_Volume', 'Total_Volume', 'Max_Volume'
+                'Mean_Volume', 'Count_Volume', 'Total_Volume', 'Max_Volume',
+                'Mean_Area', 'Count_Area', 'Total_Area', 'Max_Area'
             ]
             df = df.reindex(row_order)
 
@@ -129,7 +152,7 @@ class VolSpherMetricsAnalyzer:
 
     def run(self, output_path: str, file_format: str = 'excel'):
         """Run the analysis for all organelles."""
-        logger.info("Starting Vol/Spher Metrics Analysis")
+        logger.info("Starting Morphology Metrics Analysis")
         logger.info(f"Input directory: {self.input_dir}")
 
         self.load_data()
@@ -162,11 +185,18 @@ class VolSpherMetricsAnalyzer:
         logger.info("Analysis Complete")
 
     def _generate_metadata(self) -> dict:
+        # Collect which metrics were actually computed from the first result
+        metrics_list = []
+        if self.results:
+            first_df = next(iter(self.results.values()))
+            metrics_list = first_df.index.tolist()
+
         metadata = generate_base_metadata(
             input_dir=self.input_dir,
-            analysis_type='Vol/Spher Metrics',
+            analysis_type='Morphology Metrics',
             Organelles_Analyzed=', '.join(sorted(self.results.keys())),
             Total_Cells=str(max(df.shape[1] for df in self.results.values()) if self.results else 0),
+            Metrics_Computed=', '.join(metrics_list),
         )
         self.metadata = metadata
         return metadata
@@ -180,6 +210,9 @@ class VolSpherMetricsAnalyzer:
             metadata_df = pd.DataFrame(list(metadata.items()), columns=['Parameter', 'Value'])
             metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
 
+            exclusions_df = self.data_loader.get_exclusions_df()
+            exclusions_df.to_excel(writer, sheet_name='Exclusions', index=False)
+
         logger.info(f"Saved {len(self.results)} organelle sheets to Excel")
 
     def _save_csv(self, output_dir: str):
@@ -187,13 +220,17 @@ class VolSpherMetricsAnalyzer:
         output_path.mkdir(parents=True, exist_ok=True)
 
         for organelle, df in self.results.items():
-            csv_path = output_path / f"vol_spher_metrics_{organelle}.csv"
+            csv_path = output_path / f"morphology_metrics_{organelle}.csv"
             df.to_csv(csv_path, index=True)
 
         metadata = self._generate_metadata()
         metadata_df = pd.DataFrame(list(metadata.items()), columns=['Parameter', 'Value'])
-        metadata_path = output_path / "vol_spher_metrics_metadata.csv"
+        metadata_path = output_path / "morphology_metrics_metadata.csv"
         metadata_df.to_csv(metadata_path, index=False)
+
+        exclusions_df = self.data_loader.get_exclusions_df()
+        exclusions_path = output_path / "morphology_metrics_exclusions.csv"
+        exclusions_df.to_csv(exclusions_path, index=False)
 
         logger.info(f"Saved {len(self.results)} organelle CSVs to {output_dir}")
 
@@ -201,7 +238,7 @@ class VolSpherMetricsAnalyzer:
         if not self.results:
             return "No results available"
 
-        summary = ["Vol/Spher Metrics Analysis Summary"]
+        summary = ["Morphology Metrics Analysis Summary"]
         for organelle, df in self.results.items():
             summary.append(f"\n{organelle}:")
             summary.append(f"  Cells analyzed: {df.shape[1]}")

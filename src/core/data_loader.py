@@ -52,6 +52,9 @@ class DataLoader:
         self.all_organelles = []
         self.unique_cells = []
 
+        # Exclusion tracking for reproducibility
+        self.exclusions = []
+
         # Lookup dictionaries for O(1) access (built after find_cell_folders)
         self._folder_lookup = {}  # (cell_id, organelle) -> folder info
         self._cells_to_organelles = {}  # cell_id -> [organelles]
@@ -219,6 +222,27 @@ class DataLoader:
                 self._cells_to_organelles[cell_id] = []
             self._cells_to_organelles[cell_id].append(folder['organelle'])
 
+    def _parse_context_from_path(self, file_path: Path) -> tuple:
+        """Extract cell_id and organelle from file's parent Statistics folder name."""
+        parent_name = file_path.parent.name
+        cell_id = 'Unknown'
+        organelle = 'Unknown'
+        cell_match = self.cell_id_pattern.match(parent_name)
+        if cell_match:
+            cell_id = cell_match.group(1)
+        org_match = self.organelle_pattern.search(parent_name)
+        if org_match:
+            organelle = org_match.group(1)
+        return cell_id, organelle
+
+    def get_exclusions_df(self) -> pd.DataFrame:
+        """Get all recorded exclusions as a DataFrame for reproducibility reporting."""
+        columns = ['Cell_ID', 'Organelle', 'Metric', 'File', 'Excluded_Count',
+                    'Value_Min', 'Value_Max', 'Reason']
+        if not self.exclusions:
+            return pd.DataFrame(columns=columns)
+        return pd.DataFrame(self.exclusions, columns=columns)
+
     def load_metric_file(self, file_path: Path, metric_name: str, drop_na: bool = True) -> pd.Series:
         """
         Load an Imaris CSV metric file and return validated values.
@@ -266,6 +290,9 @@ class DataLoader:
             if np.isinf(values).any():
                 raise ValueError(f"Infinite {metric_name} values found in {file_path.name}")
 
+            # Track original NaN count before metric-specific filtering
+            original_nan_count = int(values.isna().sum())
+
             # Metric-specific validation
             if metric_name == "Distance":
                 if (values.dropna().abs() > 100000).any():
@@ -278,10 +305,22 @@ class DataLoader:
                 non_nan = values.dropna()
                 neg_count = (non_nan < 0).sum()
                 if neg_count > 0:
+                    neg_values = non_nan[non_nan < 0]
                     logger.warning(
                         f"{neg_count} negative volume value(s) excluded in {file_path.name}. "
                         f"Min: {non_nan.min():.3f}"
                     )
+                    cell_id, organelle = self._parse_context_from_path(file_path)
+                    self.exclusions.append({
+                        'Cell_ID': cell_id,
+                        'Organelle': organelle,
+                        'Metric': metric_name,
+                        'File': file_path.name,
+                        'Excluded_Count': int(neg_count),
+                        'Value_Min': float(neg_values.min()),
+                        'Value_Max': float(neg_values.max()),
+                        'Reason': 'Negative volume'
+                    })
                     values = values.where(values >= 0)
                 if values.dropna().max() > 1000:
                     logger.warning(
@@ -289,16 +328,64 @@ class DataLoader:
                         f"Max: {values.dropna().max():.3f}"
                     )
 
+            elif metric_name == "Area":
+                non_nan = values.dropna()
+                neg_count = (non_nan < 0).sum()
+                if neg_count > 0:
+                    neg_values = non_nan[non_nan < 0]
+                    logger.warning(
+                        f"{neg_count} negative area value(s) excluded in {file_path.name}. "
+                        f"Min: {non_nan.min():.3f}"
+                    )
+                    cell_id, organelle = self._parse_context_from_path(file_path)
+                    self.exclusions.append({
+                        'Cell_ID': cell_id,
+                        'Organelle': organelle,
+                        'Metric': metric_name,
+                        'File': file_path.name,
+                        'Excluded_Count': int(neg_count),
+                        'Value_Min': float(neg_values.min()),
+                        'Value_Max': float(neg_values.max()),
+                        'Reason': 'Negative area'
+                    })
+                    values = values.where(values >= 0)
+
             elif metric_name == "Sphericity":
                 non_nan = values.dropna()
                 out_of_range = (non_nan < 0) | (non_nan > 1)
                 out_count = out_of_range.sum()
                 if out_count > 0:
+                    oor_values = non_nan[out_of_range]
                     logger.warning(
                         f"{out_count} sphericity value(s) outside [0, 1] excluded in {file_path.name}. "
                         f"Min: {non_nan.min():.3f}, Max: {non_nan.max():.3f}"
                     )
+                    cell_id, organelle = self._parse_context_from_path(file_path)
+                    self.exclusions.append({
+                        'Cell_ID': cell_id,
+                        'Organelle': organelle,
+                        'Metric': metric_name,
+                        'File': file_path.name,
+                        'Excluded_Count': int(out_count),
+                        'Value_Min': float(oor_values.min()),
+                        'Value_Max': float(oor_values.max()),
+                        'Reason': 'Sphericity outside [0, 1]'
+                    })
                     values = values.where((values >= 0) & (values <= 1))
+
+            # Track original NaN exclusions (not from metric-specific filtering)
+            if original_nan_count > 0 and drop_na:
+                cell_id, organelle = self._parse_context_from_path(file_path)
+                self.exclusions.append({
+                    'Cell_ID': cell_id,
+                    'Organelle': organelle,
+                    'Metric': metric_name,
+                    'File': file_path.name,
+                    'Excluded_Count': original_nan_count,
+                    'Value_Min': np.nan,
+                    'Value_Max': np.nan,
+                    'Reason': 'NaN values in source data'
+                })
 
             if drop_na:
                 values = values.dropna()

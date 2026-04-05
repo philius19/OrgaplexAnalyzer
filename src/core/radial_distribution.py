@@ -200,6 +200,9 @@ class RadialDistributionAnalyzer:
             metadata_df = pd.DataFrame(list(metadata.items()), columns=['Parameter', 'Value'])
             metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
 
+            exclusions_df = self.data_loader.get_exclusions_df()
+            exclusions_df.to_excel(writer, sheet_name='Exclusions', index=False)
+
         logger.info(f"Saved radial distribution to Excel: {output_path}")
 
     def _save_csv(self, output_dir: str):
@@ -217,6 +220,9 @@ class RadialDistributionAnalyzer:
         metadata = self._generate_metadata()
         metadata_df = pd.DataFrame(list(metadata.items()), columns=['Parameter', 'Value'])
         metadata_df.to_csv(output_path / f"radial_distribution_{self.organelle}_metadata.csv", index=False)
+
+        exclusions_df = self.data_loader.get_exclusions_df()
+        exclusions_df.to_csv(output_path / f"radial_distribution_{self.organelle}_exclusions.csv", index=False)
 
         logger.info(f"Saved radial distribution CSVs to {output_dir}")
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from datetime import datetime
 
 from ..core.one_way_interaction import OneWayInteractionAnalyzer
-from ..core.vol_spher_metrics import VolSpherMetricsAnalyzer
+from ..core.vol_spher_metrics import MorphologyMetricsAnalyzer
 from ..core.nway_interaction import NWayInteractionAnalyzer
 from ..core.radial_distribution import RadialDistributionAnalyzer
 from .bait_selection_dialog import BaitSelectionDialog
@@ -147,10 +147,10 @@ class OrganelleAnalysisGUI:
         oneway_radio.pack(side=tk.LEFT, padx=5)
         ToolTip(oneway_radio, "Calculate mean shortest distances between organelle populations")
 
-        volspher_radio = ttk.Radiobutton(analysis_frame, text="Vol/Spher-Metrics",
-                                          variable=self.analysis_type, value='vol_spher')
-        volspher_radio.pack(side=tk.LEFT, padx=5)
-        ToolTip(volspher_radio, "Calculate volume and sphericity statistics per organelle")
+        morph_radio = ttk.Radiobutton(analysis_frame, text="Morphology-Metrics",
+                                       variable=self.analysis_type, value='morphology')
+        morph_radio.pack(side=tk.LEFT, padx=5)
+        ToolTip(morph_radio, "Calculate volume, sphericity, and area statistics per organelle")
 
         row += 1
         nway_frame = ttk.Frame(main_frame)
@@ -334,14 +334,14 @@ class OrganelleAnalysisGUI:
                     analyzer = OneWayInteractionAnalyzer(input_dir)
                     analyzer.run(str(output_path), file_format=file_format)
 
-                elif analysis_type == 'vol_spher':
+                elif analysis_type == 'morphology':
                     if file_format == 'excel':
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        output_path = output_dir / f"Vol_Spher_Metrics_{timestamp}.xlsx"
+                        output_path = output_dir / f"Morphology_Metrics_{timestamp}.xlsx"
                     else:
-                        output_path = output_dir / "Vol_Spher_Metrics"
+                        output_path = output_dir / "Morphology_Metrics"
 
-                    analyzer = VolSpherMetricsAnalyzer(input_dir)
+                    analyzer = MorphologyMetricsAnalyzer(input_dir)
                     analyzer.run(str(output_path), file_format=file_format)
 
                 elif analysis_type == 'nway_single':

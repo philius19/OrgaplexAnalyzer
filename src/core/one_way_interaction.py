@@ -284,8 +284,16 @@ class OneWayInteractionAnalyzer:
                 index=False
             )
 
+            # Write exclusion report for reproducibility
+            exclusions_df = self.data_loader.get_exclusions_df()
+            exclusions_df.to_excel(
+                writer,
+                sheet_name='Exclusions',
+                index=False
+            )
+
         logger.info(f"Results exported to: {output_path}")
-        logger.info("Excel file contains 4 sheets: Mean_Distance, Count, Data_Completeness, Metadata")
+        logger.info("Excel file contains 5 sheets: Mean_Distance, Count, Data_Completeness, Metadata, Exclusions")
 
     def export_to_csv(self, output_dir: str):
         """
@@ -328,6 +336,12 @@ class OneWayInteractionAnalyzer:
         metadata_path = output_dir / "one_way_interactions_metadata.csv"
         metadata_df.to_csv(metadata_path, index=False)
         logger.info(f"Metadata saved to: {metadata_path.name}")
+
+        # Export exclusion report for reproducibility
+        exclusions_df = self.data_loader.get_exclusions_df()
+        exclusions_path = output_dir / "one_way_interactions_exclusions.csv"
+        exclusions_df.to_csv(exclusions_path, index=False)
+        logger.info(f"Exclusions saved to: {exclusions_path.name}")
 
         logger.info("CSV export complete")
 

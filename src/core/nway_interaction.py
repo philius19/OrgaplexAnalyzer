@@ -227,13 +227,15 @@ class NWayInteractionAnalyzer:
             logger.warning(f"No distance files found for {cell_id}/{bait_organelle}")
             return None
 
-        # Load distance data for each target organelle
-        distance_data = {}
+        # Load distance data for each target organelle (drop_na=False for proper alignment)
+        raw_distance_data = {}
         reference_length = None
 
         for file_path, target_org in distance_files:
             try:
-                distances = self.data_loader.load_distance_file(file_path)
+                distances = self.data_loader.load_metric_file(
+                    file_path, "Distance", drop_na=False
+                )
 
                 # Validate consistent length
                 if reference_length is None:
@@ -246,15 +248,32 @@ class NWayInteractionAnalyzer:
                     # Skip this target to maintain data integrity
                     continue
 
-                distance_data[target_org] = distances
+                raw_distance_data[target_org] = distances.reset_index(drop=True)
 
             except Exception as e:
                 logger.error(f"Failed to load {file_path.name}: {str(e)}")
                 continue
 
-        if not distance_data:
+        if not raw_distance_data:
             logger.warning(f"No valid distance data for {cell_id}/{bait_organelle}")
             return None
+
+        # Align all distance data: drop rows where ANY target has NaN
+        aligned_df = pd.DataFrame(raw_distance_data)
+        nan_mask = aligned_df.isna().any(axis=1)
+        n_nan = int(nan_mask.sum())
+        if n_nan > 0:
+            logger.warning(
+                f"{n_nan} surface(s) excluded due to NaN distances in "
+                f"{cell_id}/{bait_organelle}"
+            )
+            aligned_df = aligned_df.dropna()
+
+        if aligned_df.empty:
+            logger.warning(f"No valid distance data after NaN removal for {cell_id}/{bait_organelle}")
+            return None
+
+        distance_data = {col: aligned_df[col] for col in aligned_df.columns}
 
         # Evaluate boolean contact patterns
         counts = self._evaluate_contacts(distance_data)
@@ -406,6 +425,10 @@ class NWayInteractionAnalyzer:
                 )
                 metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
 
+                # Sheet 3: Exclusions
+                exclusions_df = self.data_loader.get_exclusions_df()
+                exclusions_df.to_excel(writer, sheet_name='Exclusions', index=False)
+
             created_files.append(str(output_path))
             logger.info(f"Saved: {output_path}")
 
@@ -452,6 +475,13 @@ class NWayInteractionAnalyzer:
             )
             metadata_df.to_csv(metadata_path, index=False)
             created_files.append(str(metadata_path))
+
+            # Exclusions file
+            exclusions_df = self.data_loader.get_exclusions_df()
+            exclusions_filename = f"nway_analysis_bait-{bait}_{timestamp}_exclusions.csv"
+            exclusions_path = output_dir / exclusions_filename
+            exclusions_df.to_csv(exclusions_path, index=False)
+            created_files.append(str(exclusions_path))
 
         logger.info(f"Exported {len(created_files)} CSV files to {output_dir}")
         return created_files

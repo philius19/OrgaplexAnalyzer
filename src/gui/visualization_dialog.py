@@ -181,7 +181,8 @@ class VisualizationDialog:
                 )
                 self.dialog.after(0, lambda: self._on_success(output_path))
             except Exception as e:
-                self.dialog.after(0, lambda: self._on_error(str(e)))
+                err_msg = str(e)
+                self.dialog.after(0, lambda: self._on_error(err_msg))
 
         threading.Thread(target=_run, daemon=True).start()
 
