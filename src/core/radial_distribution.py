@@ -95,12 +95,44 @@ class RadialDistributionAnalyzer:
             logger.error(f"Failed to load data for {cell_id}: {e}")
             return None
 
+        # Align by index — handle different lengths by taking shared rows only
         if len(volumes) != len(distances):
-            logger.warning(f"Row mismatch for {cell_id}: Vol={len(volumes)}, Dist={len(distances)}")
-            return None
+            shared_len = min(len(volumes), len(distances))
+            logger.warning(
+                f"Row mismatch for {cell_id}: Vol={len(volumes)}, Dist={len(distances)}. "
+                f"Aligning to {shared_len} shared rows."
+            )
+            self.data_loader.exclusions.append({
+                'Cell_ID': cell_id,
+                'Organelle': self.organelle,
+                'Metric': 'Volume+Distance',
+                'File': f"{vol_file.name}, {dist_file.name}",
+                'Excluded_Count': abs(len(volumes) - len(distances)),
+                'Value_Min': np.nan,
+                'Value_Max': np.nan,
+                'Reason': 'Row mismatch between Volume and Distance files'
+            })
+            volumes = volumes.iloc[:shared_len]
+            distances = distances.iloc[:shared_len]
 
         df = pd.DataFrame({'Vol': volumes.values, 'Dist': distances.values})
-        df = df.dropna(subset=['Vol', 'Dist'])
+
+        # Drop rows where either Volume or Distance is NaN (per-datapoint, not per-cell)
+        nan_mask = df[['Vol', 'Dist']].isna().any(axis=1)
+        n_nan = int(nan_mask.sum())
+        if n_nan > 0:
+            logger.warning(f"{n_nan} surface(s) dropped due to NaN in Volume/Distance for {cell_id}")
+            self.data_loader.exclusions.append({
+                'Cell_ID': cell_id,
+                'Organelle': self.organelle,
+                'Metric': 'Volume+Distance',
+                'File': f"{vol_file.name}, {dist_file.name}",
+                'Excluded_Count': n_nan,
+                'Value_Min': np.nan,
+                'Value_Max': np.nan,
+                'Reason': 'NaN in paired Volume/Distance data'
+            })
+            df = df.dropna(subset=['Vol', 'Dist'])
 
         if df.empty:
             logger.warning(f"No valid data after NaN removal for {cell_id}")
@@ -111,9 +143,19 @@ class RadialDistributionAnalyzer:
 
         df['Dist_bin'] = pd.cut(df['Dist'], bins=bin_edges, include_lowest=True)
 
-        n_unbinned = df['Dist_bin'].isna().sum()
+        n_unbinned = int(df['Dist_bin'].isna().sum())
         if n_unbinned > 0:
-            logger.warning(f"{n_unbinned} surfaces outside bin range in {cell_id}")
+            logger.warning(f"{n_unbinned} surfaces outside bin range [0, {self.max_distance}] in {cell_id}")
+            self.data_loader.exclusions.append({
+                'Cell_ID': cell_id,
+                'Organelle': self.organelle,
+                'Metric': 'Distance_from_Origin',
+                'File': dist_file.name,
+                'Excluded_Count': n_unbinned,
+                'Value_Min': float(df.loc[df['Dist_bin'].isna(), 'Dist'].min()),
+                'Value_Max': float(df.loc[df['Dist_bin'].isna(), 'Dist'].max()),
+                'Reason': f'Distance outside bin range [0, {self.max_distance}]'
+            })
 
         binned = df.groupby('Dist_bin', observed=False)['Vol'].sum()
         return binned
